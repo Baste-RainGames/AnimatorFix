@@ -1,13 +1,18 @@
-# AnimatorFix
+# About
 A lean project that aims to fix a bunch of the many issues with Unity's Animator and StateMachineBehaviour systems.
 The Animator is a really powerfull system, but it has some major disadvantages. First of all, the API for getting information about the current state of the Animator is horribly obtuse and cumbersome to use. Secondly, the StateMachineBehaviour's messages - especially OnStateMachineEnter/Exit - doesn't fire when you expect them to. Both of these disadvantages are by design, so this project aims to create the tools needed to use the Animator comfortably. 
 
 I want the code to work with your existing Animator-based projects, so this isn't a replacement or a framework. The start of this project is code I wrote for World To The West, in order to work with Animators there. I have seen a lot of people on Unity Answers and the Unity forums that have the same gripes with this stuff as I do, so I figured that there would be interest both in using the code, and helping improve it.
 
+# Contents
 There's two main scripts:
 - StateMachineBehaviourFix is supposed to be a replacement for StateMachineBehaviour. It's got an OnStateMachineExit method that's called whenever a state machine is exited. The default Unity StateMachineBehaviour generally doesn't do that.
 - AnimatorFix is neccessary to make StateMachineBehaviourFix work. It's attached to the same object as the Animator, and works by parsing the Animator's AnimatorController to find out what methods should be called when. It's also got some convenience methods that the Animator should have had - like GetCurrentStateName(int layer) and IsInSubStateMachine(string name, int layer)
  
+# Setup:
+The repo is meant to be placed directly in your Assets folder. The code's all in Plugins/AnimatorFix. If you want to just use the code for production, you should just copy over the Plugins folder directly.
+ 
+# Current issues
 This is a very work in progress project. The code from the inital commit is exactly what I needed to work with Animators in World To The West. There's a couple of things that are problematic, and some things that I think this needs to be a worthy stand-alone project:
 
 Bugs: 
