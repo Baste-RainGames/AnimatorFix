@@ -2,7 +2,7 @@
 A lean project that aims to fix a bunch of the many issues with Unity's Animator and StateMachineBehaviour systems.
 The Animator is a really powerfull system, but it has some major disadvantages. First of all, the API for getting information about the current state of the Animator is horribly obtuse and cumbersome to use. Secondly, the StateMachineBehaviour's messages - especially OnStateMachineEnter/Exit - doesn't fire when you expect them to. Both of these disadvantages are by design, so this project aims to create the tools needed to use the Animator comfortably. 
 
-I want the code to work with your existing Animator-based projects, so this isn't a replacement or a framework. The start of this project is code I wrote for World To The West, in order to work with Animators there. I have seen a lot of people on Unity Answers and the Unity forums that have the same gripes with this stuff as I do, so I figured that there would be interest both in using the code, and helping improve it.
+I want the code to work with your existing Animator-based projects, so this isn't a replacement or a framework. The start of this project is code I wrote for [World To The West](http://www.worldtothewest.com/), in order to work with Animators there. I have seen a lot of people on Unity Answers and the Unity forums that have the same gripes with this stuff as I do, so I figured that there would be interest both in using the code, and helping improve it.
 
 # Contents
 There's two main scripts:
