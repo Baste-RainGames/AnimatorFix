@@ -8,12 +8,32 @@ using UnityEngine.Experimental.Director;
 /// </summary>
 public abstract class StateMachineBehaviourFix : StateMachineBehaviour {
 
-    public string parentMachine;
+    [HideInInspector] public string parentMachine;
+    [HideInInspector] public string stateName;
+    [HideInInspector] public int stateHash;
 
-    public override sealed void OnStateMachineExit(Animator animator, int stateMachinePathHash) { }
+    #region sealedOriginalMethods
 
-    public override sealed void OnStateMachineExit(Animator animator, int stateMachinePathHash, AnimatorControllerPlayable controller) { }
+    public sealed override void OnStateMachineExit(Animator animator, int stateMachinePathHash) {}
+    public sealed override void OnStateMachineExit(Animator animator, int stateMachinePathHash, AnimatorControllerPlayable controller) {}
+    public sealed override void OnStateEnter(Animator animator, AnimatorStateInfo stateInfo, int layerIndex) {}
+    public sealed override void OnStateEnter(Animator animator, AnimatorStateInfo stateInfo, int layerIndex, AnimatorControllerPlayable controller) {}
+    public sealed override void OnStateExit(Animator animator, AnimatorStateInfo stateInfo, int layerIndex) {}
+    public sealed override void OnStateExit(Animator animator, AnimatorStateInfo stateInfo, int layerIndex, AnimatorControllerPlayable controller) {}
+    public sealed override void OnStateMachineEnter(Animator animator, int stateMachinePathHash) {}
+    public sealed override void OnStateMachineEnter(Animator animator, int stateMachinePathHash, AnimatorControllerPlayable controller) {}
+    public sealed override void OnStateUpdate(Animator animator, AnimatorStateInfo stateInfo, int layerIndex) {}
+    public sealed override void OnStateUpdate(Animator animator, AnimatorStateInfo stateInfo, int layerIndex, AnimatorControllerPlayable controller) {}
 
-    public virtual void OnStateMachineExit(Animator animator) {}
+    #endregion
 
+    #region customMethods
+
+    public virtual void StateMachineExit(Animator animator) {}
+    public virtual void StateMachineEnter(Animator animator) {}
+    public virtual void StateEnter(Animator animator) {}
+    public virtual void StateUpdate(Animator animator) {}
+    public virtual void StateExit(Animator animator) {}
+
+    #endregion
 }

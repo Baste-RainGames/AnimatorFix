@@ -1,0 +1,4 @@
+This tests checks that OnStateEnter, OnStateUpdate and OnStateExit are executed in order, as expected.
+
+The default StateMachineBehaviour behaviour is that if we transition from state A to state B, there's quite a few frames between
+OnStateEnter is called on state B before OnStateExit is called on State A. During that time, OnStateUpdate is called on both states.

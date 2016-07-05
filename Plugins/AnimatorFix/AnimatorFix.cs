@@ -5,6 +5,7 @@ using System.Text;
 #if UNITY_EDITOR
 using UnityEditor;
 using UnityEditor.Animations;
+
 #endif
 
 /// <summary>
@@ -12,11 +13,12 @@ using UnityEditor.Animations;
 /// </summary>
 public class AnimatorFix : MonoBehaviour, ISerializationCallbackReceiver {
 
+    private Dictionary<int, StateInfo>[] stateInfos;
+    private Dictionary<int, StateMachineBehaviourFix> behaviours;
+
     private Animator animator;
-    private Dictionary<int, StateInfo>[] hashToStateInfo;
     private int lastNameHash = -1;
     private StateInfo lastStateInfo;
-    private StateMachineBehaviourFix[] behavioursFixToExit;
 
     public void OnBeforeSerialize() {
 #if UNITY_EDITOR
@@ -24,42 +26,33 @@ public class AnimatorFix : MonoBehaviour, ISerializationCallbackReceiver {
             var anim = GetComponent<Animator>();
 
             var serializedObject = new SerializedObject(anim);
-            var serializedProperty = serializedObject.FindProperty("m_Controller");
-            var objectReferenceValue = serializedProperty.objectReferenceValue;
+            var animatorControllerProperty = serializedObject.FindProperty("m_Controller");
+            var animatorControllerObject = animatorControllerProperty.objectReferenceValue;
 
-            if (objectReferenceValue == null) {
+            if (animatorControllerObject == null) {
                 // This happens in one of the many possible OnBeforeSerialize steps that happen
                 // if you recompile with the controller open. Other OnBeforeSerialize steps saves
                 // the correct data. We don't do null-checks on the serializedProperty - if that's null,
-                // something internally is broken and this script must be rewritten.
+                // Unity changed the name of the AnimatorController field and this script must be rewritten.
 
                 // Of course, the object reference value is null if the controller isn't assigned. That's cool too.
                 return;
             }
-            AnimatorController controller = (AnimatorController) objectReferenceValue;
-            
+            AnimatorController controller = (AnimatorController) animatorControllerObject;
 
-            hashToStateInfo = new Dictionary<int, StateInfo>[controller.layers.Length];
+            stateInfos = new Dictionary<int, StateInfo>[controller.layers.Length];
             for (int i = 0; i < controller.layers.Length; i++) {
-                hashToStateInfo[i] = new Dictionary<int, StateInfo>();
+                stateInfos[i] = new Dictionary<int, StateInfo>();
             }
 
             for (int i = 0; i < controller.layers.Length; i++) {
                 var layer = controller.layers[i];
-                FindStateInfoRecursively(layer.stateMachine, hashToStateInfo[i], new List<AnimatorStateMachine>());
+                FindStateInfoRecursively(layer.stateMachine, stateInfos[i], new List<AnimatorStateMachine>());
             }
 
             SerializeHashToStateInfoDict();
         }
 #endif
-    }
-
-    public void OnAfterDeserialize() {
-        DeserializeHashToStateInfoDict();
-    }
-
-    private void Awake() {
-        animator = GetComponent<Animator>();
     }
 
 #if UNITY_EDITOR
@@ -68,18 +61,26 @@ public class AnimatorFix : MonoBehaviour, ISerializationCallbackReceiver {
         stateMachineStack.Add(stateMachine);
 
         foreach (var state in stateMachine.states) {
-            var actualState = state.state;
+            AnimatorState actualState = state.state;
             int hash = actualState.nameHash;
 
             if (!dict.ContainsKey(hash)) {
                 dict[hash] = new StateInfo(actualState.name);
             }
 
+            foreach (var behaviour in actualState.behaviours) {
+                var behaviourFix = behaviour as StateMachineBehaviourFix;
+                if (behaviourFix != null) {
+                    behaviourFix.stateName = actualState.name;
+                    behaviourFix.stateHash = actualState.nameHash;
+                }
+            }
+
             foreach (var machine in stateMachineStack) {
                 foreach (var behaviour in machine.behaviours) {
-                    var smartBehaviour = behaviour as StateMachineBehaviourFix;
-                    if (smartBehaviour) {
-                        smartBehaviour.parentMachine = machine.name;
+                    var behaviourFix = behaviour as StateMachineBehaviourFix;
+                    if (behaviourFix) {
+                        behaviourFix.parentMachine = machine.name;
                     }
                 }
                 dict[hash].containingStateMachines.Add(machine.name);
@@ -93,52 +94,86 @@ public class AnimatorFix : MonoBehaviour, ISerializationCallbackReceiver {
     }
 #endif
 
+    public void OnAfterDeserialize() {
+        DeserializeHashToStateInfoDict();
+    }
+
+    private void Awake() {
+        animator = GetComponent<Animator>();
+    }
+
     private void Update() {
-        if (hashToStateInfo == null) {
+        if (stateInfos == null) {
             Debug.LogWarning("missing information about the Animator on " + name + ", please update the prefab/object");
             return;
         }
 
-        if (behavioursFixToExit == null)
-            behavioursFixToExit = animator.GetBehaviours<StateMachineBehaviourFix>();
+        if (behaviours == null) {
+            behaviours = InitBehaviours();
+        }
 
         var currentNameHash = animator.GetCurrentAnimatorStateInfo(0).shortNameHash;
-        if (lastNameHash == -1) {
-            lastNameHash = currentNameHash;
-            lastStateInfo = hashToStateInfo[0][lastNameHash];
 
+        bool firstUpdate = lastNameHash == -1;
+        if (firstUpdate) {
+            lastNameHash = currentNameHash;
+            lastStateInfo = stateInfos[0][lastNameHash];
         }
 
-        if (currentNameHash != lastNameHash) {
-            if (!hashToStateInfo[0].ContainsKey(currentNameHash)) {
-                Debug.LogWarning("missing information about the Animator on " + name + ", please update the prefab/object");
-                return;
-            }
-
-            StateInfo currentStateInfo = hashToStateInfo[0][currentNameHash];
-
-            for (int i = 0; i < lastStateInfo.containingStateMachines.Count; i++) {
-                var machine = lastStateInfo.containingStateMachines[i];
-                if (!currentStateInfo.containingStateMachines.Contains(machine)) {
-                    for (int j = 0; j < behavioursFixToExit.Length; j++) {
-                        var behaviour = behavioursFixToExit[j];
-                        if (behaviour.parentMachine == machine) {
-                            try {
-                                behaviour.OnStateMachineExit(animator);
-                            }
-                            catch {
-                                Debug.LogWarning("error in state machine " + machine);
-                                throw;
-                            }
-                        }
-                    }
-                }
-            }
-
-            lastNameHash = currentNameHash;
-            lastStateInfo = currentStateInfo;
+        bool changedState = currentNameHash != lastNameHash;
+        if (firstUpdate || changedState) {
+            HandleStateChanged(currentNameHash, firstUpdate);
+        }
+        else {
+            behaviours[currentNameHash].StateUpdate(animator);
         }
 
+    }
+
+    private Dictionary<int, StateMachineBehaviourFix> InitBehaviours() {
+        var behaviourDict = new Dictionary<int, StateMachineBehaviourFix>();
+        var allBehaviours = animator.GetBehaviours<StateMachineBehaviourFix>();
+
+        for (int i = 0; i < allBehaviours.Length; i++) {
+            behaviourDict[allBehaviours[i].stateHash] = allBehaviours[i];
+        }
+
+        return behaviourDict;
+    }
+
+    private void HandleStateChanged(int currentNameHash, bool firstUpdate) {
+        if (!stateInfos[0].ContainsKey(currentNameHash)) {
+            Debug.LogWarning("missing information about the Animator on " + name + ", please update the prefab/object");
+            return;
+        }
+
+        if (!firstUpdate) {
+            behaviours[lastNameHash].StateExit(animator);
+        }
+        behaviours[currentNameHash].StateEnter(animator);
+
+        StateInfo currentStateInfo = stateInfos[0][currentNameHash];
+
+        //for (int i = 0; i < lastStateInfo.containingStateMachines.Count; i++) {
+        //    var machine = lastStateInfo.containingStateMachines[i];
+        //    if (!currentStateInfo.containingStateMachines.Contains(machine)) {
+        //        for (int j = 0; j < behaviours.Length; j++) {
+        //            var behaviour = behaviours[j];
+        //            if (behaviour.parentMachine == machine) {
+        //                try {
+        //                    behaviour.StateMachineExit(animator);
+        //                }
+        //                catch {
+        //                    Debug.LogWarning("error in state machine " + machine);
+        //                    throw;
+        //                }
+        //            }
+        //        }
+        //    }
+        //}
+
+        lastNameHash = currentNameHash;
+        lastStateInfo = currentStateInfo;
     }
 
     public bool IsInSubStateMachine(string name, int layerIndex) {
@@ -150,53 +185,45 @@ public class AnimatorFix : MonoBehaviour, ISerializationCallbackReceiver {
     }
 
     public StateInfo GetCurrentStateInfo(int layerIndex) {
-        return hashToStateInfo[layerIndex][animator.GetCurrentAnimatorStateInfo(layerIndex).shortNameHash];
+        return stateInfos[layerIndex][animator.GetCurrentAnimatorStateInfo(layerIndex).shortNameHash];
     }
 
-    [SerializeField]
-    private int numLayers;
-    [SerializeField]
-    private IntStateInfoPair[] layer0Serialized;
-    [SerializeField]
-    private IntStateInfoPair[] layer1Serialized;
-    [SerializeField]
-    private IntStateInfoPair[] layer2Serialized;
-    [SerializeField]
-    private IntStateInfoPair[] layer3Serialized;
+    [SerializeField] private int numLayers;
+    [SerializeField] private HashStateInfoPair[] layer0Serialized;
+    [SerializeField] private HashStateInfoPair[] layer1Serialized;
+    [SerializeField] private HashStateInfoPair[] layer2Serialized;
+    [SerializeField] private HashStateInfoPair[] layer3Serialized;
 
-    public void SerializeHashToStateInfoDict() {
-        numLayers = hashToStateInfo.Length;
-        for (int i = 0; i < hashToStateInfo.Length; i++) {
+    private void SerializeHashToStateInfoDict() {
+        numLayers = stateInfos.Length;
+        for (int i = 0; i < stateInfos.Length; i++) {
             if (i > 3)
                 break;
-            IntStateInfoPair[] arr = null;
+            HashStateInfoPair[] arr = null;
 
             if (i == 0) {
-                layer0Serialized = new IntStateInfoPair[hashToStateInfo[i].Count];
+                layer0Serialized = new HashStateInfoPair[stateInfos[i].Count];
                 arr = layer0Serialized;
             }
 
             if (i == 1) {
-                layer1Serialized = new IntStateInfoPair[hashToStateInfo[i].Count];
+                layer1Serialized = new HashStateInfoPair[stateInfos[i].Count];
                 arr = layer1Serialized;
             }
 
             if (i == 2) {
-                layer2Serialized = new IntStateInfoPair[hashToStateInfo[i].Count];
+                layer2Serialized = new HashStateInfoPair[stateInfos[i].Count];
                 arr = layer2Serialized;
             }
 
             if (i == 3) {
-                layer3Serialized = new IntStateInfoPair[hashToStateInfo[i].Count];
+                layer3Serialized = new HashStateInfoPair[stateInfos[i].Count];
                 arr = layer3Serialized;
             }
 
             int cntr = 0;
-            foreach (var keyValuePair in hashToStateInfo[i]) {
-                arr[cntr++] = new IntStateInfoPair {
-                    intVal = keyValuePair.Key,
-                    stateInfo = keyValuePair.Value
-                };
+            foreach (var keyValuePair in stateInfos[i]) {
+                arr[cntr++] = new HashStateInfoPair(keyValuePair.Key, keyValuePair.Value);
             }
         }
         if (numLayers < 4)
@@ -208,10 +235,10 @@ public class AnimatorFix : MonoBehaviour, ISerializationCallbackReceiver {
     }
 
     private void DeserializeHashToStateInfoDict() {
-        hashToStateInfo = new Dictionary<int, StateInfo>[numLayers];
+        stateInfos = new Dictionary<int, StateInfo>[numLayers];
         for (int i = 0; i < numLayers; i++) {
-            hashToStateInfo[i] = new Dictionary<int, StateInfo>();
-            IntStateInfoPair[] arr = null;
+            stateInfos[i] = new Dictionary<int, StateInfo>();
+            HashStateInfoPair[] arr = null;
 
             if (i == 0) {
                 arr = layer0Serialized;
@@ -230,7 +257,7 @@ public class AnimatorFix : MonoBehaviour, ISerializationCallbackReceiver {
             }
 
             for (int j = 0; j < arr.Length; j++) {
-                hashToStateInfo[i][arr[j].intVal] = arr[j].stateInfo;
+                stateInfos[i][arr[j].intVal] = arr[j].stateInfo;
             }
         }
     }
@@ -240,7 +267,7 @@ public class AnimatorFix : MonoBehaviour, ISerializationCallbackReceiver {
 /// <summary>
 /// Contains all the information about a state
 /// </summary>
-[System.Serializable]
+[Serializable]
 public class StateInfo {
 
     public StateInfo(string stateName) {
@@ -260,10 +287,18 @@ public class StateInfo {
 
         return sb.ToString();
     }
+
 }
 
 [Serializable]
-public class IntStateInfoPair {
+public class HashStateInfoPair {
+
     public int intVal;
     public StateInfo stateInfo;
+
+    public HashStateInfoPair(int intVal, StateInfo stateInfo) {
+        this.intVal = intVal;
+        this.stateInfo = stateInfo;
+    }
+
 }

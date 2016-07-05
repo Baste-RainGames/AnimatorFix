@@ -1,0 +1,27 @@
+1: Proper OnState-messages. This means that the order when transitioning from state A to state B is guaranteed to be:
+
+- A.StateUpdate
+- A.StateExit
+- B.StateEnter
+- B.StateUpdate
+
+This also means that StateMachineEnter and StateMachineExit will be called whenever a state machine is entered/exited, not
+just when the flow goes through the entry/exit nodes.
+
+2: Awake and OnEnable for the states. This will be the same as for the AnimatorFix script
+
+3: A bigger and better API for getting information about the current state of the Animator. This will include:
+- CurrentStateName
+- CurrentStateMachine/s
+- IsInState/Machine that looks a lot better than the default ones
+- IsTransitioningTo/From + GetCurrentTransition
+
+All of these will default to layer 0. This means that this attrocity:
+    if(animator.GetCurrentAnimatorStateInfo(0).IsName("Foo"))
+
+Is turned into:
+    if(animator.IsInState("Foo"))
+
+Which just reads so_much_better
+
+4: Performance: Once all the other stuff is done, this has to be measured and fixed. Both for GC and for general speed.
