@@ -2,15 +2,15 @@ using UnityEngine;
 using UnityEngine.Experimental.Director;
 
 /// <summary>
-/// Use this class instead of StateMachineBehaviour, and attach an AnimatorInfo to the same object as the Animator.
+/// Use this class instead of StateMachineBehaviour, and attach an AnimatorState to the same object as the Animator.
 /// 
 /// That will give you access to a proper OnStateMachineExit
 /// </summary>
 public abstract class StateMachineBehaviourFix : StateMachineBehaviour {
 
-    [HideInInspector] public string parentMachine;
     [HideInInspector] public string stateName;
     [HideInInspector] public int stateHash;
+    [HideInInspector] public bool attachedToStateMachine;
 
     #region sealedOriginalMethods
 
@@ -30,6 +30,7 @@ public abstract class StateMachineBehaviourFix : StateMachineBehaviour {
     #region customMethods
 
     public virtual void StateMachineExit(Animator animator) {}
+    public virtual void StateMachineUpdate(Animator animator) {}
     public virtual void StateMachineEnter(Animator animator) {}
     public virtual void StateEnter(Animator animator) {}
     public virtual void StateUpdate(Animator animator) {}

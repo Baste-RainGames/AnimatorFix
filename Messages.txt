@@ -1,0 +1,35 @@
+The methods that are defined in StateMachineBehaviourFix are:
+
+StateMachineEnter
+StateMachineUpdate
+StateMachineExit
+StateEnter
+StateUpdate
+StateExit
+
+The default (Unity) methods that have not been changed are:
+OnStateMove
+OnStateIK
+
+On a frame (Update), if the state machine doesn't change state, and state A is the current state, this happens:
+
+StateUpdate is called on state A.
+StateMachineUpdate is called on any subStateMachine that contains A.
+ - if A is contained in several machines, the methods will be called first on the innermost state machine, 
+   and then progressing outwards. So if the AnimatorController contains SubStateMachine1, which again
+   contains SubStateMachine2, which contains state A, the order will be:
+   StateUpdate called on A
+   StateMachineUpdate called on SubStateMachine2
+   StateMachineUpdate called on SubStateMachine1
+
+When the current state changes from state A to state B, this happens:
+- StateExit is called on A
+- StateMachineExit is called on any state machine exited - that is, state machines that contains A, but not B
+  As in Update, this happens innermost state to outmost state
+- StateMachineEnter is called on any state machine entered - again, this is states that contain B, but not A.
+  This happens in the reverse order as Update - so the outermost state machine is called Enter on first.
+- StateEnter is called on B
+- Then StateUpdate and StateMachineUpdate is called on State B and machines containing B as normal.
+
+
+The change is triggered when the Animator changes which state is returned by GetCurrentAnimatorStateInfo
